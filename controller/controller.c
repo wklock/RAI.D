@@ -1,6 +1,6 @@
 //
 // Created by William Klock on 3/15/16. Based on server example on tutiralspoint.com
-// RAI.D controller that the client will communicate with
+// RAI.D controller that the client will communicate with.
 //
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,7 +87,7 @@ void doprocessing (int sock) {
       exit(1);
    }
 
-   printf("Here is the message: %s\n",buffer);
+   printf("Controller received message: %s\n",buffer);
    n = write(sock,"I got your message",18);
 
    if (n < 0) {
