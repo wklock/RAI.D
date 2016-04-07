@@ -16,42 +16,11 @@
 unsigned READ;
 unsigned WRITE;
 
-size_t IP;
+char *IP;
 char *USER;
 char *PASSWORD;
 
 char *usage = "\n\t./client (-w FILENAME or -r FILENAME) -i IP_ADDRESS -u USER\n\n";
-
-void parse_ip(char *ip) {
-
-	/*
-	 * char val[4] - current value stored character by character (to be converted using atoi)
-	 * int byte - current byte, starting from top (4th byte) as its read in
-	 */
-
-	char val[4] = {0};
-	int byte = 3;
-
-	int pos = 0;
-
-	while(byte > -1) {
-		if(*ip == '.' || *ip == '\0') {
-
-			val[pos] = '\0';
-			size_t val_converted = (atoi(val) << 8*byte);
-			IP += val_converted;
-
-			pos = 0;
-			byte--;
-
-		} else {
-			val[pos++] = *ip;
-		}
-		*ip++;
-	}
-
-}
-	
 
 int main(int argc, char **argv) {
 
