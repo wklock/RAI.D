@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
 				READ = 1;
 				break;
 			case 'i':
-				parse_ip(strdup(optarg));
+				IP = strdup(optarg);
 				break;
 			case 'u':
 				USER = strdup(optarg);
