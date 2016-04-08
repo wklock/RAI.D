@@ -64,7 +64,7 @@ int main( int argc, char *argv[] ) {
       }
 
       if (pid == 0) {
-         /* This is the client process */
+         /* This is the child process */
          close(sockfd);
          doprocessing(newsockfd);
          exit(0);
@@ -80,15 +80,15 @@ void doprocessing (int sock) {
    int n;
    char buffer[256];
    bzero(buffer,256);
-   n = read(sock,buffer,255);
+   n = read(sock, buffer, 255);
 
    if (n < 0) {
       perror("ERROR reading from socket");
       exit(1);
    }
 
-   printf("Controller received message: %s\n",buffer);
-   n = write(sock,"I got your message",18);
+   printf("Controller received message: %s\n", buffer);
+   n = write(sock,"I got your message", 18);
 
    if (n < 0) {
       perror("ERROR writing to socket");
