@@ -27,11 +27,11 @@ char *FILENAME;
 
 struct addrinfo hints, *addr_info;
 
-void read_file(void) {
-
+void read_file(int socket) {
+	
 }
 
-void write_file(void) {
+void write_file(int socket) {
 
 }
 
