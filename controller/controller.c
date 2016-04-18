@@ -106,7 +106,7 @@ int main(void) {
 
         printf("server: got connection from %s\n", s);
         if (!fork()) { // this is the child process
-            if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
+            if ((numbytes = recv(new_fd, buf, MAXDATASIZE - 1, 0)) == -1) {
                 perror("recv");
                 exit(1);
             } else {
