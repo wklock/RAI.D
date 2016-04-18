@@ -41,6 +41,8 @@ int main(void) {
     int yes = 1;
     char s[INET6_ADDRSTRLEN];
     int rv;
+    char buf[MAXDATASIZE];
+
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -102,7 +104,15 @@ int main(void) {
 
         printf("server: got connection from %s\n", s);
         if (!fork()) { // this is the child process
-            close(sockfd); // child doesn't need the listener
+            if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
+                perror("recv");
+                exit(1);
+            } else {
+                buf[numbytes] = '\0';
+                printf("received '%s'\n", buf);
+
+            }
+
             if (send(new_fd, "Hello, world!", 13, 0) == -1)
                 perror("send");
             close(new_fd);
