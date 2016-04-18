@@ -20,6 +20,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <net/if.h>
+
 
 int get_socket(char *IP) {
 
@@ -43,5 +45,27 @@ int get_socket(char *IP) {
 	}
 
 	return sock;
+}
+
+// Gets IP of the machine, user specifies IPv4 or IPv6
+// TODO: Add functionality to get IP on other interfaces
+char* getlocalip(int family) {
+	if (family != AF_INET || family != AF_INET6) {
+		perror("Invalid family descriptor");
+		return NULL;
+	}
+
+	int sock;
+	struct ifreq ifr;
+	char* interface = "eth0";
+	sock = socket(family, SOCK_DGRAM, 0);
+	ifr.ifr_addr.sa_family = AF_INET;
+	strncpy(ifr.ifr_name , array , IFNAMSIZ - 1);
+	ioctl(n, SIOCGIFADDR, &ifr);
+	close(sock);
+	char* ip = inet_ntoa(( (struct sockaddr_in *)&ifr.ifr_addr )->sin_addr);
+	return ip;
+
+
 
 }
