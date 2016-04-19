@@ -6,5 +6,5 @@
  *
  */
 
-int get_socket(char *IP);
+//int get_socket(char *IP);
 char* getlocalip(int family);

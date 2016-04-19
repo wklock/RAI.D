@@ -21,6 +21,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <net/if.h>
+#include <sys/ioctl.h>
+
 #include "network.h"
 
 /*
