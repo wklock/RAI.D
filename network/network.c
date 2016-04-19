@@ -23,7 +23,6 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 
-#include "network.h"
 
 /*
 int get_socket(char *IP) {
@@ -52,25 +51,3 @@ int get_socket(char *IP) {
 }
  */
 
-// Gets IP of the machine, user specifies IPv4 or IPv6
-// TODO: Add functionality to get IP on other interfaces
-char* getlocalip(int family) {
-	if (family != AF_INET || family != AF_INET6) {
-		perror("Invalid family descriptor");
-		return NULL;
-	}
-
-	int sock;
-	struct ifreq ifr;
-	char* interface = "eth0";
-	sock = socket(family, SOCK_DGRAM, 0);
-	ifr.ifr_addr.sa_family = family;
-	strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
-	ioctl(sock, SIOCGIFADDR, &ifr);
-	close(sock);
-	char* ip = inet_ntoa(( (struct sockaddr_in *)&ifr.ifr_addr )->sin_addr);
-	return ip;
-
-
-
-}
