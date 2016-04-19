@@ -60,9 +60,9 @@ char* getlocalip(int family) {
 	struct ifreq ifr;
 	char* interface = "eth0";
 	sock = socket(family, SOCK_DGRAM, 0);
-	ifr.ifr_addr.sa_family = AF_INET;
-	strncpy(ifr.ifr_name , array , IFNAMSIZ - 1);
-	ioctl(n, SIOCGIFADDR, &ifr);
+	ifr.ifr_addr.sa_family = family;
+	strncpy(ifr.ifr_name, interface, IFNAMSIZ - 1);
+	ioctl(sock, SIOCGIFADDR, &ifr);
 	close(sock);
 	char* ip = inet_ntoa(( (struct sockaddr_in *)&ifr.ifr_addr )->sin_addr);
 	return ip;
