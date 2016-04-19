@@ -67,13 +67,17 @@ int main(int argc, char *argv[]) {
 
     printf("client: connecting to %s\n", s);
     freeaddrinfo(servinfo); // all done with this structure
+    // Tell the controller we are drive
     if (send(sockfd, "D", 1, 0) == -1)
+        perror("send");
+    if (send(sockfd, getlocalip(AF_INET), 15, 0) == -1)
         perror("send");
 
     if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
         perror("recv");
         exit(1);
     }
+
     buf[numbytes] = '\0';
     printf("received '%s'\n", buf);
     close(sockfd);

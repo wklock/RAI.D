@@ -21,6 +21,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <net/if.h>
+#include "network.h"
 
 
 int get_socket(char *IP) {
