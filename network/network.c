@@ -24,7 +24,7 @@
 #include <sys/ioctl.h>
 
 
-/*
+
 int get_socket(char *IP) {
 
 	// ret val of getaddrinfo
@@ -49,5 +49,5 @@ int get_socket(char *IP) {
 
 	return sock;
 }
- */
+
 
