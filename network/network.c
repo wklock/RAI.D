@@ -23,12 +23,13 @@
 #include <net/if.h>
 #include "network.h"
 
-
+/*
 int get_socket(char *IP) {
 
 	// ret val of getaddrinfo
 	int err;
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
+	struct addrinfo hints;
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_INET;
@@ -47,6 +48,7 @@ int get_socket(char *IP) {
 
 	return sock;
 }
+ */
 
 // Gets IP of the machine, user specifies IPv4 or IPv6
 // TODO: Add functionality to get IP on other interfaces
