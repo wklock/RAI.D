@@ -23,7 +23,7 @@
 
 #define PORT "3490" // the port client will be connecting to
 #define MAXDATASIZE 100 // max number of bytes we can get at once
-
+char* getlocalip(int family);
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
     // Tell the controller we are drive
     if (send(sockfd, "D", 1, 0) == -1)
         perror("send");
-    if (send(sockfd, getlocalip(AF_INET), 15, 0) == -1)
+    if (send(sockfd, (void*) getlocalip(AF_INET), 15, 0) == -1)
         perror("send");
 
     if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
