@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <getopt.h>
+#include <signal.h>
 
 // networking includes
 
@@ -14,28 +15,18 @@
 
 #include "client.h"
 
-const char usage[] = "\n\t./client (-w FILENAME or -r FILENAME) -i IP_ADDRESS -u USER\n\n";
 
-unsigned READ;
-unsigned WRITE;
 
-char *IP;
-char *USER;
-char *PASSWORD;
-
-char *FILENAME;
-
+int interrupt = 0;
+const char usage[] = "\n\t./client <controller IP> <controller port>\n\n";
 struct addrinfo hints, *addr_info;
+static char input[2048];
 
-void read_file(int socket) {
-	
+void close_client() {
+    interrupt = 1;
 }
 
-void write_file(int socket) {
-
-}
-
-void connect_controller(void) {
+int connect_controller(server_info_t* info) {
 
 	// ret val of getaddrinfo
 	int err;
@@ -46,15 +37,17 @@ void connect_controller(void) {
 	hints.ai_socktype = SOCK_STREAM;
 
 	// port in private range [49152, 65535]
-	if((err = getaddrinfo(IP, "50000", &hints, &addr_info)) != 0) {
+	if((err = getaddrinfo(info->ip, info->port, &hints, &addr_info)) != 0) {
 		fprintf(stderr, "IP/port error: %s\n", gai_strerror(err));
-		exit(1);
+		return 1;
 	}
 
 	if((err = connect(sock, addr_info->ai_addr, addr_info->ai_addrlen)) != 0) {
 		fprintf(stderr, "connect error: %s\n", gai_strerror(err));
-		exit(1);
+		return 1;
 	}
+
+    return 0;
 
 }
 
@@ -62,36 +55,39 @@ int main(int argc, char **argv) {
 
 	int c;
 
-	if(argc < 4) {
+	/*
+	 * Usage:
+	 * ./client <controller IP> <controller port>
+	 */
+
+	if(argc != 3) {
 		fprintf(stderr, "%s", usage);
 		exit(1);
 	}
 
-	/*
-	 * Usage:
-	 * ./client (-w FILENAME or -r FILENAME) -i IP_ADDRESS -u USER
-	 */
+    struct sigaction sig_act;
+    sig_act.sa_handler = close_client;
+    sigemptyset(&sig_act.sa_mask);
+    sig_act.sa_flags = 0;
 
-	while((c = getopt(argc, argv, "w:r:i:u:")) != -1) {
-		switch(c) {
-			case 'w':
-				if(READ) { fprintf(stderr, "Cannot read and write at the same time\n"); exit(1); }
-				WRITE = 1;
-				FILENAME = strdup(optarg);
-				break;
-			case 'r':
-				if(WRITE) { fprintf(stderr, "Cannot read and write at the same time\n"); exit(1); }
-				READ = 1;
-				FILENAME = strdup(optarg);
-				break;
-			case 'i':
-				IP = strdup(optarg);
-				break;
-			case 'u':
-				USER = strdup(optarg);
-				break;
-		}
-	}
+    server_info_t* info = calloc(1, sizeof(server_info_t));
+    info->ip = strdup(argv[1]);
+    info->port = strdup(argv[2]);
+
+    if(connect_controller(info) != 0) {
+        fprintf(stderr, "connecting to controller failed\n");
+        exit(1);
+    }
+    free(info);
+
+
+    while(!interrupt) {
+        fputs("RAI.D> ", stdout);
+
+        fgets(input, 2048, stdin);
+
+        printf("Haha, no %s", input);
+    }
 
 	exit(0);
 }
