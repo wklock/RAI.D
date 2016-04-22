@@ -17,6 +17,7 @@
 #define BACKLOG 10   // how many pending connections queue will hold
 #define MAXDATASIZE 100
 
+// TODO: Make sure we gracefully close and don't leak memory
 void close_controller() {
 
 }
@@ -115,6 +116,7 @@ int main(int argc, char** argv) {
 
         printf("server: got connection from %s\n", s);
 
+        // TODO: change this to use pthreads
         if (!fork()) { // this is the child process
             if ((numbytes = recv(new_fd, buf, MAXDATASIZE - 1, 0)) == -1) {
                 perror("recv");

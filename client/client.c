@@ -82,7 +82,10 @@ int main(int argc, char **argv) {
     }
     free(info);
 
+    // Let the server know we're a client
     send(sockfd, "C", 1, 0);
+
+    // Set up a basic command prompt
     while(!interrupt) {
 
         fputs("RAI.D> ", stdout);
