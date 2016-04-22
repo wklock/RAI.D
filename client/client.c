@@ -25,8 +25,11 @@ static char input[2048];
 void close_client() {
     interrupt = 1;
 }
-
-int connect_controller(server_info_t* info) {
+/*
+ * Connects the client to the controller
+ * Returns the file descriptor or -1 on failure
+ */
+int connect_to_controller(server_info_t* info) {
 
 	// ret val of getaddrinfo
 	int err;
@@ -39,21 +42,19 @@ int connect_controller(server_info_t* info) {
 	// port in private range [49152, 65535]
 	if((err = getaddrinfo(info->ip, info->port, &hints, &addr_info)) != 0) {
 		fprintf(stderr, "IP/port error: %s\n", gai_strerror(err));
-		return 1;
+		return -1;
 	}
 
 	if((err = connect(sock, addr_info->ai_addr, addr_info->ai_addrlen)) != 0) {
 		fprintf(stderr, "connect error: %s\n", gai_strerror(err));
-		return 1;
+		return -1;
 	}
 
-    return 0;
+    return sock;
 
 }
 
 int main(int argc, char **argv) {
-
-	int c;
 
 	/*
 	 * Usage:
@@ -65,6 +66,7 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+    int sockfd;
     struct sigaction sig_act;
     sig_act.sa_handler = close_client;
     sigemptyset(&sig_act.sa_mask);
@@ -74,19 +76,20 @@ int main(int argc, char **argv) {
     info->ip = strdup(argv[1]);
     info->port = strdup(argv[2]);
 
-    if(connect_controller(info) != 0) {
+    if((sockfd = connect_to_controller(info)) == -1) {
         fprintf(stderr, "connecting to controller failed\n");
         exit(1);
     }
     free(info);
 
-
+    send(sockfd, "C", 1, 0);
     while(!interrupt) {
+
         fputs("RAI.D> ", stdout);
 
         fgets(input, 2048, stdin);
-
-        printf("Haha, no %s", input);
+        send(sockfd, input, strnlen(input, 2048), 0);
+        printf("Sent: %s", input);
     }
 
 	exit(0);

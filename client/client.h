@@ -11,7 +11,7 @@ typedef struct server_info {
     char* port;
 } server_info_t;
 
-int connect_controller(server_info_t* info);
+int connect_to_controller(server_info_t* info);
 
 void read_file(int socket);
 void write_file(int socket);
