@@ -29,21 +29,21 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 // connected drives will be stored as a linked list
 typedef struct {
 	struct sockaddr_storage info;
-	Drive *next;
+	struct Drive *next;
 } Drive;
 
 Drive *drives;
 size_t drivesConnected;
-
-int serverSocket;
+void add_drive(Drive *drive);
 
 int clients[MAX_CLIENTS];
 int clientsConnected;
 
-int drives[MAX_DRIVES];
-int drivesConnected;
+int serverSocket;
 
 void *processClient(void *arg);
+
+void *processDrive(void *arg);
 int request_status(void);
 
 // TODO: Make sure we gracefully close and don't leak memory
@@ -154,28 +154,43 @@ int main(int argc, char** argv) {
         printf("server: got connection from %s\n", s);
 
         pthread_mutex_lock(&mutex);
-        if(connections < MAX_CONNECTIONS) {
-            // clients[clientsConnected] = client_fd;
-			char type[2];
-			read(client_fd, type, 2);
+		char type[2];
+		read(client_fd, type, 2);
 
-			pthread_attr_t attr;
-			pthread_attr_init(&attr);
-			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+		pthread_attr_t attr;
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-			if(type[0] == "C") {
+		if(clientsConnected + drivesConnected == MAX_CONNECTIONS) {
+			fprintf(stderr, "at connection capacity");
+			shutdown(client_fd, 2);
+			continue;
+		} else if(type[0] == 'C') {
+			if(clientsConnected < MAX_CLIENTS) {
+				clients[clientsConnected] = client_fd;
 				pthread_create(&client_threads[clientsConnected], &attr, processClient, (void*) (intptr_t) clients[clientsConnected]);
 				clientsConnected++;
-			} else if(type[0] == "D") {
-				pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) (intptr_t) drives[drivesConnected]);
+			} else {
+				fprintf(stderr, "at client capacity\n");
+			}
+		} else if(type[0] == 'D') {
+			if(drivesConnected < MAX_DRIVES) {
+				// initialize new drive
+				Drive *drive = malloc(sizeof(Drive));
+				drive->info = their_addr;
+				drive->next = NULL;
+				add_drive(drive);
+
+				pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) NULL);
 				drivesConnected++;
 			} else {
-				fprintf(stderr, "client type not specified\n");
+				fprintf(stderr, "at drive capacity\n");
 			}
-
-        } else {
-            shutdown(client_fd, 2);
-        }
+		} else {
+			fprintf(stderr, "client type unspecified (D - drive, C - client)\n");
+			shutdown(client_fd, 2);
+			continue;
+		}
         pthread_mutex_unlock(&mutex);
 
         printf("Connection made: client_fd=%d\n", client_fd);
