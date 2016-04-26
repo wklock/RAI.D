@@ -26,25 +26,34 @@
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// connected drives will be stored as a linked list
-typedef struct {
+// connected drives/clients will be stored as a linked lists
+// type - 'D' or 'C'
+
+typedef struct Connection Connection;
+
+struct Connection {
+
+	char type;
+	int socket;
 	struct sockaddr_storage info;
-	struct Drive *next;
-} Drive;
 
-Drive *drives;
+	Connection *next;
+
+};
+
+Connection *drives;
+Connection *clients;
+
 size_t drivesConnected;
-void add_drive(Drive *drive);
+size_t clientsConnected;
 
-int clients[MAX_CLIENTS];
-int clientsConnected;
-
-int serverSocket;
+void add_connection(Connection *conn);
 
 void *processClient(void *arg);
-
 void *processDrive(void *arg);
 int request_status(void);
+
+int serverSocket;
 
 // TODO: Make sure we gracefully close and don't leak memory
 void close_controller() {
@@ -107,6 +116,7 @@ int get_socket(char* port) {
 }
 
 int main(int argc, char** argv) {
+
     int numbytes;
     struct sockaddr_storage their_addr; // connector's address information
     int client_fd;
@@ -154,8 +164,14 @@ int main(int argc, char** argv) {
         printf("server: got connection from %s\n", s);
 
         pthread_mutex_lock(&mutex);
+
 		char type[2];
 		read(client_fd, type, 2);
+
+		Connection *conn = malloc(sizeof(Connection));
+		conn->socket = client_fd;
+		conn->info = their_addr;
+		conn->next = NULL;
 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
@@ -165,27 +181,30 @@ int main(int argc, char** argv) {
 			fprintf(stderr, "at connection capacity");
 			shutdown(client_fd, 2);
 			continue;
-		} else if(type[0] == 'C') {
+		} else if(type[0] == 'C') { // clients connected
+
 			if(clientsConnected < MAX_CLIENTS) {
-				clients[clientsConnected] = client_fd;
-				pthread_create(&client_threads[clientsConnected], &attr, processClient, (void*) (intptr_t) clients[clientsConnected]);
+				conn->type = 'C';
+				add_connection(conn);
+			
+				pthread_create(&client_threads[clientsConnected], &attr, processClient, (void*) NULL);
 				clientsConnected++;
 			} else {
 				fprintf(stderr, "at client capacity\n");
 			}
-		} else if(type[0] == 'D') {
+
+		} else if(type[0] == 'D') { // drive connected
+
 			if(drivesConnected < MAX_DRIVES) {
-				// initialize new drive
-				Drive *drive = malloc(sizeof(Drive));
-				drive->info = their_addr;
-				drive->next = NULL;
-				add_drive(drive);
+				conn->type = 'D';
+				add_connection(conn);
 
 				pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) NULL);
 				drivesConnected++;
 			} else {
 				fprintf(stderr, "at drive capacity\n");
 			}
+
 		} else {
 			fprintf(stderr, "client type unspecified (D - drive, C - client)\n");
 			shutdown(client_fd, 2);
@@ -198,7 +217,6 @@ int main(int argc, char** argv) {
 }
 
 void *processDrive(void *arg) {
-	int drive_fd = (intptr_t) arg;
 	int drive_is_connected = 1;
 
 	while(drive_is_connected) {
@@ -248,30 +266,42 @@ void *processClient(void *arg) {
     pthread_mutex_lock(&mutex);
     clientsConnected--;
     pthread_mutex_unlock(&mutex);
+
     return NULL;
+}
+
+/*
+ * Adds given connection to corresponding list
+ */
+
+void add_connection(Connection *conn) {
+
+	Connection *list;
+
+	if(conn->type == 'C') {
+		list = clients;
+	} else if(conn->type == 'D') {
+		list = drives;
+	} else {
+		fprintf(stderr, "invalid connection type given, aborting add_connection");
+		return;
+	}
+
+	if(!list) {
+		list = conn;
+	}
+	while(list->next) { // move to end of list
+		list = list->next;
+	}
+	list->next = conn;
+
+	return;
 }
 
 /*
  * Sends request to connect with drives before commit. If a drive
  * takes longer than 5 seconds to respond, return 0 and exit processes
  */
-
-void add_drive(Drive *drive) {
-
-	drivesConnected++;
-
-	Drive *curr = drives;
-
-	if(!curr) {
-		drives = drive;
-		return;
-	}
-	while(curr->next) {
-		curr = curr->next;
-	}
-	curr->next = drive;
-	return;
-}
 
 int request_status(void) {
 
