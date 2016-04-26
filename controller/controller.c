@@ -153,12 +153,21 @@ void *processClient(void *arg) {
         char buffer[MSG_SIZE];
         int len = 0;
         int num;
+        read(client_fd, buffer, MSG_SIZE);
+        if(buffer[0] == 'C') {
+            printf("New client connection\n");
+            send(client_fd, "C", 1, 0);
 
+        } else if (buffer[0] == 'D') {
+            printf("New drive connection\n");
+            send(client_fd, "D", 1, 0);
+        }
         // Read until client sends eof or \n is read
         while (1) {
             num = read(client_fd, buffer + len, MSG_SIZE);
             len += num;
-            printf("%s\n", buffer);
+            printf("%.*s", num, buffer);
+
             if (!num) {
                 client_is_connected = 0;
                 break;
