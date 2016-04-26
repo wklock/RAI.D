@@ -14,19 +14,37 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <pthread.h>
+#include <time.h>
 #include "controller.h"
 
 #define BACKLOG 10  // how many pending connections queue will hold
 #define MAXDATASIZE 100
+#define MAX_CONNECTIONS 120
 #define MAX_CLIENTS 20
+#define MAX_DRIVES 100
 #define MSG_SIZE 256
 
-int serverSocket;
-int clients[MAX_CLIENTS];
-int clientsConnected;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// connected drives will be stored as a linked list
+typedef struct {
+	struct sockaddr_storage info;
+	Drive *next;
+} Drive;
+
+Drive *drives;
+size_t drivesConnected;
+
+int serverSocket;
+
+int clients[MAX_CLIENTS];
+int clientsConnected;
+
+int drives[MAX_DRIVES];
+int drivesConnected;
+
 void *processClient(void *arg);
+int request_status(void);
 
 // TODO: Make sure we gracefully close and don't leak memory
 void close_controller() {
@@ -114,15 +132,21 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    pthread_t threads[MAX_CLIENTS];
+    pthread_t client_threads[MAX_CLIENTS];
+	pthread_t drive_threads[MAX_DRIVES];
+
     printf("server: waiting for connections...\n");
+
     while (1) {  // main accept() loop
-        sin_size = sizeof their_addr;
+
+        sin_size = sizeof(their_addr);
         client_fd = accept(serverSocket, (struct sockaddr *) &their_addr, &sin_size);
+
         if (client_fd == -1) {
             perror("accept");
             continue;
         }
+
         inet_ntop(their_addr.ss_family,
                   get_in_addr((struct sockaddr *) &their_addr),
                   s, sizeof s);
@@ -130,19 +154,42 @@ int main(int argc, char** argv) {
         printf("server: got connection from %s\n", s);
 
         pthread_mutex_lock(&mutex);
-        if(clientsConnected < MAX_CLIENTS) {
-            clients[clientsConnected] = client_fd;
-            pthread_attr_t attr;
-            pthread_attr_init(&attr);
-            pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-            pthread_create(&threads[clientsConnected], &attr, processClient, (void*) (intptr_t) clients[clientsConnected]);
-            clientsConnected++;
+        if(connections < MAX_CONNECTIONS) {
+            // clients[clientsConnected] = client_fd;
+			char type[2];
+			read(client_fd, type, 2);
+
+			pthread_attr_t attr;
+			pthread_attr_init(&attr);
+			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+			if(type[0] == "C") {
+				pthread_create(&client_threads[clientsConnected], &attr, processClient, (void*) (intptr_t) clients[clientsConnected]);
+				clientsConnected++;
+			} else if(type[0] == "D") {
+				pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) (intptr_t) drives[drivesConnected]);
+				drivesConnected++;
+			} else {
+				fprintf(stderr, "client type not specified\n");
+			}
+
         } else {
             shutdown(client_fd, 2);
         }
         pthread_mutex_unlock(&mutex);
+
         printf("Connection made: client_fd=%d\n", client_fd);
     }
+}
+
+void *processDrive(void *arg) {
+	int drive_fd = (intptr_t) arg;
+	int drive_is_connected = 1;
+
+	while(drive_is_connected) {
+
+	}
+
 }
 
 void *processClient(void *arg) {
@@ -154,6 +201,8 @@ void *processClient(void *arg) {
         int len = 0;
         int num;
 
+		char client_type;
+
         // Read until client sends eof or \n is read
         while (1) {
             num = read(client_fd, buffer + len, MSG_SIZE);
@@ -163,9 +212,14 @@ void *processClient(void *arg) {
                 client_is_connected = 0;
                 break;
             }
-            if (buffer[len - 1] == '\n')
+            if (buffer[len - 1] == '\n') {
                 break;
+			}
         }
+
+		if(request_status()) {
+			printf("%.*s\n", num, buffer);
+		}
 
         // Error or client closed the connection, so time to close this specific
         // client connection
@@ -180,4 +234,40 @@ void *processClient(void *arg) {
     clientsConnected--;
     pthread_mutex_unlock(&mutex);
     return NULL;
+}
+
+/*
+ * Sends request to connect with drives before commit. If a drive
+ * takes longer than 5 seconds to respond, return 0 and exit processes
+ */
+
+void add_drive(Drive *drive) {
+
+	drivesConnected++;
+
+	Drive *curr = drives;
+
+	if(!curr) {
+		drives = drive;
+		return;
+	}
+	while(curr->next) {
+		curr = curr->next;
+	}
+	curr->next = drive;
+	return;
+}
+
+int request_status(void) {
+
+	return 1;
+/*
+	Drive *curr = drives;
+
+	pid_t pids[drivesConnected];
+	for(size_t i = 0; i < drivesConnected; i++) {
+		pids[i] = fork();
+
+		if(pids[i] == 0) {
+*/
 }
