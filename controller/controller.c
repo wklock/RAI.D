@@ -158,7 +158,7 @@ void *processClient(void *arg) {
         while (1) {
             num = read(client_fd, buffer + len, MSG_SIZE);
             len += num;
-
+            printf("%s\n", buffer);
             if (!num) {
                 client_is_connected = 0;
                 break;
