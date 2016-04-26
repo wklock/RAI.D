@@ -48,6 +48,8 @@ size_t clientsConnected;
 
 // adds Connection to corresponding list depending on type
 void add_connection(Connection *conn);
+// removes Connection given pointer
+void remove_connection(Connection *conn);
 
 void *processClient(void *arg);
 void *processDrive(void *arg);
@@ -191,8 +193,7 @@ int main(int argc, char** argv) {
 			if(clientsConnected < MAX_CLIENTS) {
 				conn->type = 'C';
 				add_connection(conn);
-			
-				pthread_create(&client_threads[clientsConnected], &attr, processClient, (void*) NULL);
+				pthread_create(&client_threads[clientsConnected], &attr, processClient, (void*) conn);
 				clientsConnected++;
 			} else {
 				fprintf(stderr, "at client capacity\n");
@@ -203,8 +204,7 @@ int main(int argc, char** argv) {
 			if(drivesConnected < MAX_DRIVES) {
 				conn->type = 'D';
 				add_connection(conn);
-
-				pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) NULL);
+				pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) conn);
 				drivesConnected++;
 			} else {
 				fprintf(stderr, "at drive capacity\n");
@@ -229,17 +229,32 @@ int main(int argc, char** argv) {
 }
 
 void *processDrive(void *arg) {
+
+	Connection *drive = (Connection *) arg;
+	int socket = drive->socket;
+
 	int drive_is_connected = 1;
 
 	while(drive_is_connected) {
 
 	}
 
+    pthread_mutex_lock(&mutex);
+	remove_connection(drive);
+    drivesConnected--;
+    pthread_mutex_unlock(&mutex);
+
+    return NULL;
+
 }
 
 void *processClient(void *arg) {
-    int client_fd = (intptr_t)arg;
+
+	Connection *client = (Connection *) arg;
+	int socket = client->socket;
+
     int client_is_connected = 1;
+
     while (client_is_connected) {
 
         char buffer[MSG_SIZE];
@@ -250,7 +265,7 @@ void *processClient(void *arg) {
 
         // Read until client sends eof or \n is read
         while (1) {
-            num = read(client_fd, buffer + len, MSG_SIZE);
+            num = read(socket, buffer + len, MSG_SIZE);
             len += num;
 
             if (!num) {
@@ -269,13 +284,13 @@ void *processClient(void *arg) {
         // Error or client closed the connection, so time to close this specific
         // client connection
         if (!client_is_connected) {
-            printf("User %d left\n", client_fd);
+            printf("User %d left\n", socket);
             break;
         }
     }
 
-    close(client_fd);
     pthread_mutex_lock(&mutex);
+	remove_connection(client);
     clientsConnected--;
     pthread_mutex_unlock(&mutex);
 
@@ -292,10 +307,7 @@ int request_status(void) {
 	return 1;
 }
 
-/*
- * Adds given connection to corresponding list
- */
-
+// adds connection node to corresponding list
 void add_connection(Connection *conn) {
 
 	Connection *list;
@@ -305,7 +317,7 @@ void add_connection(Connection *conn) {
 	} else if(conn->type == 'D') {
 		list = drives;
 	} else {
-		fprintf(stderr, "invalid connection type given, aborting add_connection");
+		fprintf(stderr, "invalid connection type given, aborting add_connection\n");
 		return;
 	}
 
@@ -320,4 +332,39 @@ void add_connection(Connection *conn) {
 	return;
 }
 
+// removes connection node from given list based on type and socket value
+// closes socket if node found
+void remove_connection(Connection *conn) {
 
+	if(!conn) {
+		fprintf(stderr, "cannot remove unprovided Connection, aborting remove_connection\n");
+		return;
+	}
+
+	close(conn->socket);
+
+	if(conn == drives) {
+		drives = drives->next;
+	}
+	if(conn == clients) {
+		clients = clients->next;
+	}
+
+	if(conn->next == NULL) {
+		free(conn);
+		return;
+	}
+
+	Connection *temp = conn->next;
+	memcpy(conn, temp, sizeof(Connection));
+
+	if(temp == drives) {
+		drives = conn;
+	}
+	if(temp == clients) {
+		clients = conn;
+	}
+
+	free(temp);
+
+}
