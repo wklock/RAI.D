@@ -13,10 +13,20 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <pthread.h>
 #include "controller.h"
 
-#define BACKLOG 10   // how many pending connections queue will hold
+#define BACKLOG 10  // how many pending connections queue will hold
 #define MAXDATASIZE 100
+#define MAX_CLIENTS 20
+#define MSG_SIZE 256
+
+int serverSocket;
+int clients[MAX_CLIENTS];
+int clientsConnected;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void *processClient(void *arg);
 
 // TODO: Make sure we gracefully close and don't leak memory
 void close_controller() {
@@ -81,7 +91,7 @@ int get_socket(char* port) {
 int main(int argc, char** argv) {
     int numbytes;
     struct sockaddr_storage their_addr; // connector's address information
-    int new_fd, server_socket;
+    int client_fd;
     socklen_t sin_size;
     char s[INET_ADDRSTRLEN];
     char buf[MAXDATASIZE];
@@ -96,18 +106,20 @@ int main(int argc, char** argv) {
     sigemptyset(&sig_act.sa_mask);
     sig_act.sa_flags = 0;
 
-    server_socket = get_socket(argv[1]);
-    if (listen(server_socket, BACKLOG) == -1) {
+    serverSocket = get_socket(argv[1]);
+    int option = 1;
+    setsockopt(serverSocket, SOL_SOCKET, SO_REUSEPORT, &option, sizeof(option));
+    if (listen(serverSocket, BACKLOG) == -1) {
         perror("listen");
         exit(1);
     }
 
-
+    pthread_t threads[MAX_CLIENTS];
     printf("server: waiting for connections...\n");
     while (1) {  // main accept() loop
         sin_size = sizeof their_addr;
-        new_fd = accept(server_socket, (struct sockaddr *) &their_addr, &sin_size);
-        if (new_fd == -1) {
+        client_fd = accept(serverSocket, (struct sockaddr *) &their_addr, &sin_size);
+        if (client_fd == -1) {
             perror("accept");
             continue;
         }
@@ -117,23 +129,55 @@ int main(int argc, char** argv) {
 
         printf("server: got connection from %s\n", s);
 
-        // TODO: change this to use pthreads
-        if (!fork()) { // this is the child process
-            if ((numbytes = recv(new_fd, buf, MAXDATASIZE - 1, 0)) == -1) {
-                perror("recv");
-                exit(1);
-            } else {
-                buf[numbytes] = '\0';
-                printf("received '%s'\n", buf);
-            }
-
-            if (send(new_fd, "Hello, world!", 13, 0) == -1)
-                perror("send");
-
-            close(new_fd);
-            exit(0);
-
+        pthread_mutex_lock(&mutex);
+        if(clientsConnected < MAX_CLIENTS) {
+            clients[clientsConnected] = client_fd;
+            pthread_attr_t attr;
+            pthread_attr_init(&attr);
+            pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+            pthread_create(&threads[clientsConnected], &attr, processClient, (void*) (intptr_t) clients[clientsConnected]);
+            clientsConnected++;
+        } else {
+            shutdown(client_fd, 2);
         }
-        close(new_fd);  // parent doesn't need this
+        pthread_mutex_unlock(&mutex);
+        printf("Connection made: client_fd=%d\n", client_fd);
     }
+}
+
+void *processClient(void *arg) {
+    int client_fd = (intptr_t)arg;
+    int client_is_connected = 1;
+    while (client_is_connected) {
+
+        char buffer[MSG_SIZE];
+        int len = 0;
+        int num;
+
+        // Read until client sends eof or \n is read
+        while (1) {
+            num = read(client_fd, buffer + len, MSG_SIZE);
+            len += num;
+
+            if (!num) {
+                client_is_connected = 0;
+                break;
+            }
+            if (buffer[len - 1] == '\n')
+                break;
+        }
+
+        // Error or client closed the connection, so time to close this specific
+        // client connection
+        if (!client_is_connected) {
+            printf("User %d left\n", client_fd);
+            break;
+        }
+    }
+
+    close(client_fd);
+    pthread_mutex_lock(&mutex);
+    clientsConnected--;
+    pthread_mutex_unlock(&mutex);
+    return NULL;
 }
