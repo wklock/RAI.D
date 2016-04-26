@@ -26,27 +26,27 @@
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// connected drives/clients will be stored as a linked lists
-// type - 'D' or 'C'
+// connected drives/clients will be stored as a linked lists of Connection structs
 
 typedef struct Connection Connection;
 
 struct Connection {
 
-	char type;
+	char type; // either 'D' or 'C'
 	int socket;
 	struct sockaddr_storage info;
 
 	Connection *next;
-
 };
 
+// lists
 Connection *drives;
 Connection *clients;
 
 size_t drivesConnected;
 size_t clientsConnected;
 
+// adds Connection to corresponding list depending on type
 void add_connection(Connection *conn);
 
 void *processClient(void *arg);
@@ -165,9 +165,11 @@ int main(int argc, char** argv) {
 
         pthread_mutex_lock(&mutex);
 
+		// read in connection type (client/drive initially sends 'C\n' or 'D\n')
 		char type[2];
 		read(client_fd, type, 2);
 
+		// allocate new connection
 		Connection *conn = malloc(sizeof(Connection));
 		conn->socket = client_fd;
 		conn->info = their_addr;
@@ -178,10 +180,13 @@ int main(int argc, char** argv) {
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 		if(clientsConnected + drivesConnected == MAX_CONNECTIONS) {
+
 			fprintf(stderr, "at connection capacity");
 			shutdown(client_fd, 2);
-			continue;
-		} else if(type[0] == 'C') { // clients connected
+			free(conn);
+			conn = NULL;
+
+		} else if(type[0] == 'C') { // client connected
 
 			if(clientsConnected < MAX_CLIENTS) {
 				conn->type = 'C';
@@ -206,13 +211,20 @@ int main(int argc, char** argv) {
 			}
 
 		} else {
-			fprintf(stderr, "client type unspecified (D - drive, C - client)\n");
+
+			fprintf(stderr, "client type unspecified/invalid (D - drive, C - client)\n");
 			shutdown(client_fd, 2);
-			continue;
+			free(conn);
+			conn = NULL;
+
 		}
         pthread_mutex_unlock(&mutex);
 
-        printf("Connection made: client_fd=%d\n", client_fd);
+		if(conn) {
+        	printf("Connection made: client_fd=%d\n", client_fd);
+		} else {
+			printf("Connection failed\n");
+		}
     }
 }
 
@@ -271,6 +283,16 @@ void *processClient(void *arg) {
 }
 
 /*
+ * Sends request to connect with drives before commit. If a drive
+ * takes longer than 5 seconds to respond, return 0 and exit processes
+ */
+
+// TODO
+int request_status(void) {
+	return 1;
+}
+
+/*
  * Adds given connection to corresponding list
  */
 
@@ -298,21 +320,4 @@ void add_connection(Connection *conn) {
 	return;
 }
 
-/*
- * Sends request to connect with drives before commit. If a drive
- * takes longer than 5 seconds to respond, return 0 and exit processes
- */
 
-int request_status(void) {
-
-	return 1;
-/*
-	Drive *curr = drives;
-
-	pid_t pids[drivesConnected];
-	for(size_t i = 0; i < drivesConnected; i++) {
-		pids[i] = fork();
-
-		if(pids[i] == 0) {
-*/
-}
