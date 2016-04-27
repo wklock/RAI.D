@@ -26,8 +26,13 @@
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-// connected drives/clients will be stored as a linked lists of Connection structs
+pthread_mutex_t message_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t new_message_cond;
+volatile int new_message = 0;
+char curr_message[MSG_SIZE];
+int message_length = 0;
 
+// connected drives/clients will be stored as a linked lists of Connection structs
 typedef struct Connection Connection;
 
 struct Connection {
@@ -38,6 +43,8 @@ struct Connection {
 
 	Connection *next;
 };
+
+
 
 // lists
 Connection *drives;
@@ -131,6 +138,8 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
+    pthread_cond_init(&new_message_cond, NULL);
+
     struct sigaction sig_act;
     sig_act.sa_handler = close_controller;
     sigemptyset(&sig_act.sa_mask);
@@ -193,6 +202,7 @@ int main(int argc, char** argv) {
 			if(clientsConnected < MAX_CLIENTS) {
 				conn->type = 'C';
 				add_connection(conn);
+                printf("New client connection\n");
 				pthread_create(&client_threads[clientsConnected], &attr, processClient, (void*) conn);
 				clientsConnected++;
 			} else {
@@ -204,7 +214,8 @@ int main(int argc, char** argv) {
 			if(drivesConnected < MAX_DRIVES) {
 				conn->type = 'D';
 				add_connection(conn);
-				pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) conn);
+                printf("New drive connection\n");
+                pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) conn);
 				drivesConnected++;
 			} else {
 				fprintf(stderr, "at drive capacity\n");
@@ -234,10 +245,27 @@ void *processDrive(void *arg) {
 	int socket = drive->socket;
 
 	int drive_is_connected = 1;
-
+    int new_message_local;
 	while(drive_is_connected) {
-
-	}
+        pthread_mutex_lock(&message_mutex);
+        new_message_local = new_message;
+        /*
+         * ********************************
+         * ********************************
+         * For some reason the thread doesn't always wake up here
+         * ********************************
+         * ********************************
+         */
+        while(new_message_local == new_message) {
+            printf("sleep, %d, %d \n", new_message_local, new_message);
+            pthread_cond_wait(&new_message_cond, &message_mutex);
+            printf("awake, %d, %d \n", new_message_local, new_message);
+        }
+        printf("break\n");
+        send(socket, curr_message, message_length, 0);
+        //printf("%.*s", message_length, curr_message);
+        pthread_mutex_unlock(&message_mutex);
+    }
 
     pthread_mutex_lock(&mutex);
 	remove_connection(drive);
@@ -257,36 +285,32 @@ void *processClient(void *arg) {
 
     while (client_is_connected) {
 
-        char buffer[MSG_SIZE];
-        int len = 0;
-        int num;
-        read(client_fd, buffer, MSG_SIZE);
-        if(buffer[0] == 'C') {
-            printf("New client connection\n");
-		char client_type;
 
-        } else if (buffer[0] == 'D') {
-            printf("New drive connection\n");
-            send(client_fd, "D", 1, 0);
-        }
         // Read until client sends eof or \n is read
         while (1) {
-            num = read(socket, buffer + len, MSG_SIZE);
-            len += num;
-            printf("%.*s", num, buffer);
+            pthread_mutex_lock(&message_mutex);
+            message_length = read(socket, curr_message, MSG_SIZE);
+            printf("%d\n", new_message);
+            new_message =  !new_message;
+            printf("%d\n", new_message);
+            printf("%.*s", message_length, curr_message);
+            pthread_cond_broadcast(&new_message_cond);
 
-            if (!num) {
+            pthread_mutex_unlock(&message_mutex);
+            if (!message_length) {
                 client_is_connected = 0;
                 break;
             }
-            if (buffer[len - 1] == '\n') {
-                break;
-			}
-        }
 
-		if(request_status()) {
-			printf("%.*s\n", num, buffer);
-		}
+            // Don't really know why this is here
+//            if (buffer[len - 1] == '\n') {
+//                break;
+//			}
+        }
+//
+//		if(request_status()) {
+//			printf("%.*s\n", num, buffer);
+//		}
 
         // Error or client closed the connection, so time to close this specific
         // client connection

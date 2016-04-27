@@ -24,7 +24,7 @@
 #include <string.h>
 #include "drive.h"
 
-#define PORT "3490" // the port client will be connecting to
+#define PORT "25555" // the port client will be connecting to
 #define MAXDATASIZE 100 // max number of bytes we can get at once
 char* getlocalip(int family);
 
@@ -83,13 +83,22 @@ int main(int argc, char *argv[]) {
     // Tell the controller we are drive
     if (send(sockfd, "D", 1, 0) == -1)
         perror("send");
-    if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
-        perror("recv");
-        exit(1);
+
+    int active = 1;
+    while (active) {
+        if ((numbytes = recv(sockfd, buf, MAXDATASIZE, 0)) == -1) {
+            perror("recv");
+            exit(1);
+        }
+        if(!numbytes) {
+            active = 0;
+            break;
+        }
+
+        buf[numbytes] = '\0';
+        printf("received '%s'\n", buf);
     }
 
-    buf[numbytes] = '\0';
-    printf("received '%s'\n", buf);
     close(sockfd);
     return 0;
 }
