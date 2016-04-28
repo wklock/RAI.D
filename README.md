@@ -1,4 +1,4 @@
-# RPMI
+# RMPI
 Redundant Message Passing Interface
 
 An honors project for University of Illinois Urbana-Champaign CS241 Spring 2016
