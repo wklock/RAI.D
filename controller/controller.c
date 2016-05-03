@@ -12,6 +12,8 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define BACKLOG 10  // how many pending connections queue will hold
 #define MAXDATASIZE 100
@@ -61,7 +63,7 @@ void remove_connection(Connection *conn);
 
 void *processClient(void *arg);
 void *processDrive(void *arg);
-int request_status(void);
+int request_status(Connection *conn);
 void* commitController(void *arg);
 
 int serverSocket;
@@ -330,15 +332,7 @@ void *processClient(void *arg) {
                 client_is_connected = 0;
                 break;
             }
-            // Don't really know why this is here
-//            if (buffer[len - 1] == '\n') {
-//                break;
-//			}
         }
-//
-//		if(request_status()) {
-//			printf("%.*s\n", num, buffer);
-//		}
 
         // Error or client closed the connection, so time to close this specific
         // client connection
@@ -359,10 +353,70 @@ void *processClient(void *arg) {
 /*
  * Sends request to connect with drives before commit. If a drive
  * takes longer than 5 seconds to respond, return 0 and exit processes
+ *
+ * return -1 on error
  */
 
 // TODO
-int request_status(void) {
+int request_status(Connection *conn) {
+
+	int flags;
+	int socket = conn->socket;
+	// get status of socket (F_GETFL)
+	if((flags = fcntl(socket, F_GETFL, 0)) == -1) {
+		fprintf(stderr, "request_status: invalid socket\n");
+		return -1;
+	}
+	// if socket is good, set status flags to non-blocking (F_SETFL)
+	if(fcntl(socket, F_SETFL, flags | O_NONBLOCK) == -1) {
+		fprintf(stderr, "request_status: could not set nonblock status on socket\n"); 
+		return -1;
+	}
+
+	// casting sockaddr_storage to sockaddr... possible issue?
+	errno = 0;
+	int res = connect(socket, (struct sockaddr *) &conn->info, sizeof(conn->info));
+
+	fd_set set;
+	struct timeval tv;
+	int opt;
+	socklen_t len = sizeof(int);
+
+	if(res < 0) {
+		if(errno == EINPROGRESS) {
+			tv.tv_sec = 5;
+			tv.tv_usec = 0;
+
+			FD_ZERO(&set);
+			FD_SET(socket, &set);
+
+			if(select(socket+1, NULL, &set, NULL, &tv) > 0) {
+				getsockopt(socket, SOL_SOCKET, SO_ERROR, (void *)(&opt), &len);
+				if(opt) {
+					fprintf(stderr, "request_status: Connection error\n");
+				}
+			} else {
+				fprintf(stderr, "request_status: CONNECTION TIMEOUT\n");
+				return 0;
+			}
+
+		} else {
+			fprintf(stderr, "request_status: error connecting\n");
+		}
+	} else {
+		fprintf(stderr, "request_status: Connection error\n");
+	}
+
+	// set back to blocking
+	if((flags = fcntl(socket, F_GETFL, 0)) == -1) {
+		fprintf(stderr, "request_status: invalid socket\n");
+		return -1;
+	}
+	if(fcntl(socket, F_SETFL, flags & ~O_NONBLOCK) == -1) {
+		fprintf(stderr, "request_status: could not set block status on socket\n"); 
+		return -1;
+	}
+
 	return 1;
 }
 
