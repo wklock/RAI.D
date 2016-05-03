@@ -1,5 +1,5 @@
-# RMPI
-Redundant Message Passing Interface
+# RMSI
+Redundant Message Sending Interface
 
 An honors project for University of Illinois Urbana-Champaign CS241 Spring 2016
 
