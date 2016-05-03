@@ -4,18 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <errno.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-#include <sys/wait.h>
 #include <signal.h>
 #include <pthread.h>
-#include <time.h>
-#include "controller.h"
 
 #define BACKLOG 10  // how many pending connections queue will hold
 #define MAXDATASIZE 100
@@ -25,12 +21,16 @@
 #define MSG_SIZE 256
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
 pthread_mutex_t message_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t ack_received_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 pthread_cond_t new_message_cond;
-volatile int new_message = 0;
+
+volatile int ack_received = 0;
+volatile int new_message_global = 0;
 char curr_message[MSG_SIZE];
 int message_length = 0;
+
 
 // connected drives/clients will be stored as a linked lists of Connection structs
 typedef struct Connection Connection;
@@ -39,18 +39,19 @@ struct Connection {
 
 	char type; // either 'D' or 'C'
 	int socket;
+    int num; // Drive 1, 2, 3...
 	struct sockaddr_storage info;
 
 	Connection *next;
 };
-
-
 
 // lists
 Connection *drives;
 Connection *clients;
 
 size_t drivesConnected;
+size_t drives_ack_recv = 0;
+
 size_t clientsConnected;
 
 // adds Connection to corresponding list depending on type
@@ -61,12 +62,14 @@ void remove_connection(Connection *conn);
 void *processClient(void *arg);
 void *processDrive(void *arg);
 int request_status(void);
+void* commitController(void *arg);
 
 int serverSocket;
 
+volatile int interrupt = 0;
 // TODO: Make sure we gracefully close and don't leak memory
 void close_controller() {
-
+    interrupt = 1;
 }
 
 // get sockaddr, IPv4 or IPv6:
@@ -147,7 +150,6 @@ int main(int argc, char** argv) {
 
     serverSocket = get_socket(argv[1]);
     int option = 1;
-    setsockopt(serverSocket, SOL_SOCKET, SO_REUSEPORT, &option, sizeof(option));
     if (listen(serverSocket, BACKLOG) == -1) {
         perror("listen");
         exit(1);
@@ -155,10 +157,11 @@ int main(int argc, char** argv) {
 
     pthread_t client_threads[MAX_CLIENTS];
 	pthread_t drive_threads[MAX_DRIVES];
-
+    pthread_t commit_thread;
+    pthread_create(&commit_thread, NULL, commitController, NULL);
     printf("server: waiting for connections...\n");
 
-    while (1) {  // main accept() loop
+    while (!interrupt) {  // main accept() loop
 
         sin_size = sizeof(their_addr);
         client_fd = accept(serverSocket, (struct sockaddr *) &their_addr, &sin_size);
@@ -168,9 +171,7 @@ int main(int argc, char** argv) {
             continue;
         }
 
-        inet_ntop(their_addr.ss_family,
-                  get_in_addr((struct sockaddr *) &their_addr),
-                  s, sizeof s);
+        inet_ntop(their_addr.ss_family, get_in_addr((struct sockaddr *) &their_addr), s, sizeof s);
 
         printf("server: got connection from %s\n", s);
 
@@ -213,6 +214,7 @@ int main(int argc, char** argv) {
 
 			if(drivesConnected < MAX_DRIVES) {
 				conn->type = 'D';
+                conn->num = drivesConnected + 1;
 				add_connection(conn);
                 printf("New drive connection\n");
                 pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) conn);
@@ -232,39 +234,65 @@ int main(int argc, char** argv) {
         pthread_mutex_unlock(&mutex);
 
 		if(conn) {
-        	printf("Connection made: client_fd=%d\n", client_fd);
+        	printf("Connection made with fd: %d\n", client_fd);
 		} else {
 			printf("Connection failed\n");
 		}
     }
 }
 
+void* commitController(void *arg) {
+    /*
+    int all_ack_received_local;
+
+    pthread_mutex_lock(&all_ack_received_mutex);
+    while(all_ack_received_local == all_ack_received_global) {
+        pthread_cond_wait(&all_ack_received_cond, &all_ack_received_mutex);
+    }
+    pthread_mutex_lock(&all_ack_received_mutex);
+    drives_ack_recv++;
+    all_ack_received_local = all_ack_received_global;
+
+    pthread_mutex_unlock(&all_ack_received_mutex);
+    printf("Received response from all drives\nSending commit message");
+    all_ack_received_global = !all_ack_received_local;
+    send(socket, "COMMIT", 6, 0);
+     */
+    return NULL;
+}
+
 void *processDrive(void *arg) {
 
 	Connection *drive = (Connection *) arg;
 	int socket = drive->socket;
+    int drive_num = drive->num;
 
+    char response[3];
 	int drive_is_connected = 1;
     int new_message_local;
 	while(drive_is_connected) {
+        new_message_local = new_message_global;
         pthread_mutex_lock(&message_mutex);
-        new_message_local = new_message;
-        /*
-         * ********************************
-         * ********************************
-         * For some reason the thread doesn't always wake up here
-         * ********************************
-         * ********************************
-         */
-        while(new_message_local == new_message) {
-            printf("sleep, %d, %d \n", new_message_local, new_message);
+
+        while(new_message_local == new_message_global) {
             pthread_cond_wait(&new_message_cond, &message_mutex);
-            printf("awake, %d, %d \n", new_message_local, new_message);
         }
-        printf("break\n");
+
         send(socket, curr_message, message_length, 0);
+
         //printf("%.*s", message_length, curr_message);
         pthread_mutex_unlock(&message_mutex);
+
+        recv(socket, response, 3, 0);
+        printf("Received response from drive %d\n", drive_num);
+        pthread_mutex_lock(&ack_received_mutex);
+        ack_received++;
+        pthread_mutex_unlock(&ack_received_mutex);
+        while(ack_received != drivesConnected) {}
+        send(socket, "COMMIT", 6, 0);
+        ack_received = 0;
+
+
     }
 
     pthread_mutex_lock(&mutex);
@@ -288,20 +316,20 @@ void *processClient(void *arg) {
 
         // Read until client sends eof or \n is read
         while (1) {
-            pthread_mutex_lock(&message_mutex);
             message_length = read(socket, curr_message, MSG_SIZE);
-            printf("%d\n", new_message);
-            new_message =  !new_message;
-            printf("%d\n", new_message);
+            pthread_mutex_lock(&message_mutex);
+
+            new_message_global =  !new_message_global;
+
             printf("%.*s", message_length, curr_message);
             pthread_cond_broadcast(&new_message_cond);
 
             pthread_mutex_unlock(&message_mutex);
+
             if (!message_length) {
                 client_is_connected = 0;
                 break;
             }
-
             // Don't really know why this is here
 //            if (buffer[len - 1] == '\n') {
 //                break;

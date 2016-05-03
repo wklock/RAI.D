@@ -1,15 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-#include <stdint.h>
-#include <ctype.h>
-#include <getopt.h>
 #include <signal.h>
 
 // networking includes
 
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 
