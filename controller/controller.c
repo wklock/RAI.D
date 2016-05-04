@@ -291,7 +291,7 @@ void *processDrive(void *arg) {
         ack_received++;
         pthread_mutex_unlock(&ack_received_mutex);
 		while(ack_received != drivesConnected) {
-			printf("not enough drives\n");
+			printf("%d %zu\n", ack_received, drivesConnected);
 		}
         //printf("%d\n", request_status(drive));
         send(socket, "COMMIT", 6, 0);
