@@ -7,10 +7,11 @@
 #include <string.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 
 #define PORT "25555" // the port client will be connecting to
-#define MAXDATASIZE 100 // max number of bytes we can get at once
+#define MAX_DATA_SIZE 100 // max number of bytes we can get at once
 char* getlocalip(int family);
 
 // get sockaddr, IPv4 or IPv6:
@@ -25,7 +26,8 @@ void *get_in_addr(struct sockaddr *sa) {
 
 int main(int argc, char *argv[]) {
     int sockfd, numbytes;
-    char buf[MAXDATASIZE];
+    char* buf = malloc(MAX_DATA_SIZE);
+    char* last_message;
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
@@ -33,7 +35,12 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "usage: drive host\n");
         exit(1);
     }
-    FILE* log = fopen("log.txt", "a+");
+
+    srand(time(NULL));
+    int r = rand();
+    char* file_name = malloc(sizeof("log") + sizeof(r));
+    sprintf(file_name, "log:%d", r);
+    FILE* log = fopen(file_name, "a+");
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
@@ -73,7 +80,8 @@ int main(int argc, char *argv[]) {
 
     int active = 1;
     while (active) {
-        if ((numbytes = read(sockfd, buf, MAXDATASIZE)) == -1) {
+        memset(buf, 0, MAX_DATA_SIZE);
+        if ((numbytes = read(sockfd, buf, MAX_DATA_SIZE)) == -1) {
             perror("reads");
             exit(1);
         }
@@ -82,14 +90,18 @@ int main(int argc, char *argv[]) {
             active = 0;
             break;
         }
-        if(strncmp(buf, "COMMIT", numbytes) == 0) {
-            printf("received commit message");
 
+        if(strncmp(buf, "COMMIT", numbytes) == 0) {
+            printf("Received commit message\n");
+            fprintf(log, "%s",last_message);
+            fflush(log);
+            printf("Wrote message\n");
         } else {
-            printf("%d\n", numbytes);
-            printf("received %.*s", numbytes, buf);
+            printf("received %d bytes %.*s", numbytes, numbytes, buf);
             send(sockfd, "ACK", 3, 0);
             printf("Acknowledged last message\n");
+            last_message = strdup(buf);
+            printf("buf:%slast_message:%s", buf, last_message);
         }
 
 

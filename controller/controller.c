@@ -16,7 +16,7 @@
 #include <errno.h>
 
 #define BACKLOG 10  // how many pending connections queue will hold
-#define MAXDATASIZE 100
+#define MAX_DATA_SIZE 100
 #define MAX_CONNECTIONS 120
 #define MAX_CLIENTS 20
 #define MAX_DRIVES 100
@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
     int client_fd;
     socklen_t sin_size;
     char s[INET_ADDRSTRLEN];
-    char buf[MAXDATASIZE];
+    char buf[MAX_DATA_SIZE];
 
     if(argc != 2) {
         fprintf(stderr, "\n\t./controller <port>\n\n");
@@ -290,7 +290,7 @@ void *processDrive(void *arg) {
         pthread_mutex_lock(&ack_received_mutex);
         ack_received++;
         pthread_mutex_unlock(&ack_received_mutex);
-        while(ack_received != drivesConnected) {}
+        //printf("%d\n", request_status(drive));
         send(socket, "COMMIT", 6, 0);
         ack_received = 0;
 
@@ -352,7 +352,7 @@ void *processClient(void *arg) {
 
 /*
  * Sends request to connect with drives before commit. If a drive
- * takes longer than 5 seconds to respond, return 0 and exit processes
+ * takes longer than 5 seconds to respond, return 0
  *
  * return -1 on error
  */
