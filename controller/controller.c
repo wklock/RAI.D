@@ -26,7 +26,7 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t message_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t ack_received_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-//pthread_barrier_t commit_barrier;
+pthread_barrier_t commit_barrier;
 pthread_cond_t new_message_cond;
 
 volatile int ack_received = 0;
