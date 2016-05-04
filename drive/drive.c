@@ -8,10 +8,12 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <signal.h>
 
 
 #define PORT "25555" // the port client will be connecting to
 #define MAX_DATA_SIZE 100 // max number of bytes we can get at once
+int sockfd, interrupt = 0;
 char* getlocalip(int family);
 
 // get sockaddr, IPv4 or IPv6:
@@ -23,9 +25,15 @@ void *get_in_addr(struct sockaddr *sa) {
 
 }
 
+void close_client(int sig, siginfo_t *siginfo, void *context) {
+    printf("Handler\n");
+    send(sockfd, "DOW", 3, 0);
+    interrupt = 1;
+    exit(1);
+}
 
 int main(int argc, char *argv[]) {
-    int sockfd, numbytes;
+    int numbytes;
     char* buf = malloc(MAX_DATA_SIZE);
     char* last_message;
     struct addrinfo hints, *servinfo, *p;
@@ -36,6 +44,17 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    struct sigaction sig_act;
+    //sig_act.sa_handler = close_client;
+    sig_act.sa_sigaction = close_client;
+    sig_act.sa_flags = SA_SIGINFO;
+
+    sigemptyset(&sig_act.sa_mask);
+    //sig_act.sa_flags = 0;
+    if (sigaction(SIGINT, &sig_act, NULL) < 0) {
+        perror ("sigint");
+        return 1;
+    }
     srand(time(NULL));
     int r = rand();
     char* file_name = malloc(sizeof("log") + sizeof(r));
@@ -90,19 +109,22 @@ int main(int argc, char *argv[]) {
             active = 0;
             break;
         }
+        if(!interrupt) {
 
-        if(strncmp(buf, "COMMIT", numbytes) == 0) {
-            printf("Received commit message\n");
-            fprintf(log, "%s",last_message);
-            fflush(log);
-            printf("Wrote message\n");
-        } else {
-            printf("received %d bytes %.*s", numbytes, numbytes, buf);
-            send(sockfd, "ACK", 3, 0);
-            printf("Acknowledged last message\n");
-            last_message = strdup(buf);
+            if (strncmp(buf, "COMMIT", numbytes) == 0) {
+                printf("Received commit message\n");
+                fprintf(log, "%s", last_message);
+                fflush(log);
+                printf("Wrote message\n");
+            } else {
+                printf("received %d bytes %.*s", numbytes, numbytes, buf);
+                send(sockfd, "ACK", 3, 0);
+                printf("Acknowledged last message\n");
+                last_message = strdup(buf);
+
+
+            }
         }
-
 
 
     }

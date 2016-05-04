@@ -17,7 +17,7 @@ const char usage[] = "\n\t./client <controller IP> <controller port>\n\n";
 struct addrinfo hints, *addr_info;
 static char input[2048];
 
-void close_client() {
+void close_client(int i) {
     interrupt = 1;
 }
 /*

@@ -12,8 +12,8 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <pthread.h>
+#include "../barrier.c"
 #include <fcntl.h>
-#include <errno.h>
 
 #define BACKLOG 10  // how many pending connections queue will hold
 #define MAX_DATA_SIZE 100
@@ -26,6 +26,7 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t message_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t ack_received_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+pthread_barrier_t commit_barrier;
 pthread_cond_t new_message_cond;
 
 volatile int ack_received = 0;
@@ -221,6 +222,8 @@ int main(int argc, char** argv) {
                 printf("New drive connection\n");
                 pthread_create(&drive_threads[drivesConnected], &attr, processDrive, (void *) conn);
 				drivesConnected++;
+				pthread_barrier_destroy(&commit_barrier);
+				pthread_barrier_init(&commit_barrier, NULL, drivesConnected);
 			} else {
 				fprintf(stderr, "at drive capacity\n");
 			}
@@ -273,29 +276,36 @@ void *processDrive(void *arg) {
 	int drive_is_connected = 1;
     int new_message_local;
 	while(drive_is_connected) {
-        new_message_local = new_message_global;
-        pthread_mutex_lock(&message_mutex);
+		new_message_local = new_message_global;
+		pthread_mutex_lock(&message_mutex);
 
-        while(new_message_local == new_message_global) {
-            pthread_cond_wait(&new_message_cond, &message_mutex);
-        }
-
-        send(socket, curr_message, message_length, 0);
-
-        //printf("%.*s", message_length, curr_message);
-        pthread_mutex_unlock(&message_mutex);
-
-        recv(socket, response, 3, 0);
-        printf("Received response from drive %d\n", drive_num);
-        pthread_mutex_lock(&ack_received_mutex);
-        ack_received++;
-        pthread_mutex_unlock(&ack_received_mutex);
-		while(ack_received != drivesConnected) {
-			printf("%d %zu\n", ack_received, drivesConnected);
+		while (new_message_local == new_message_global) {
+			pthread_cond_wait(&new_message_cond, &message_mutex);
 		}
-        //printf("%d\n", request_status(drive));
-        send(socket, "COMMIT", 6, 0);
-        ack_received = 0;
+
+		send(socket, curr_message, message_length, 0);
+
+		//printf("%.*s", message_length, curr_message);
+		pthread_mutex_unlock(&message_mutex);
+
+		read(socket, response, 3);
+		printf("%s\n", response);
+		if (strncmp(response, "DOW", 3) == 0) {
+			fprintf(stderr, "Drive: %d failed\n", drive_num);
+			break;
+		} else {
+			printf("Received response from drive %d\n", drive_num);
+			//printf("%d %zu\n", ack_received, drivesConnected);
+
+//			pthread_mutex_lock(&ack_received_mutex);
+//        	ack_received++;
+//        	pthread_mutex_unlock(&ack_received_mutex);
+			pthread_barrier_wait(&commit_barrier);
+			//printf("%d\n", request_status(drive));
+			send(socket, "COMMIT", 6, 0);
+			ack_received = 0;
+		}
+
 
 
     }
@@ -456,7 +466,6 @@ void remove_connection(Connection *conn) {
 		fprintf(stderr, "cannot remove unprovided Connection, aborting remove_connection\n");
 		return;
 	}
-
 	close(conn->socket);
 
 	if(conn == drives) {
