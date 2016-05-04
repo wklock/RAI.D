@@ -290,6 +290,9 @@ void *processDrive(void *arg) {
         pthread_mutex_lock(&ack_received_mutex);
         ack_received++;
         pthread_mutex_unlock(&ack_received_mutex);
+		while(ack_received != drivesConnected) {
+			printf("not enough drives\n");
+		}
         //printf("%d\n", request_status(drive));
         send(socket, "COMMIT", 6, 0);
         ack_received = 0;

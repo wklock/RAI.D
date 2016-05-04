@@ -101,7 +101,6 @@ int main(int argc, char *argv[]) {
             send(sockfd, "ACK", 3, 0);
             printf("Acknowledged last message\n");
             last_message = strdup(buf);
-            printf("buf:%slast_message:%s", buf, last_message);
         }
 
 
