@@ -14,6 +14,10 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <errno.h>
+// Apple doesn't have barriers that work. Add them ourselves
+#ifdef __APPLE__
+#include "../barrier.c"
+#endif
 
 #define BACKLOG 10  // how many pending connections queue will hold
 #define MAX_DATA_SIZE 100

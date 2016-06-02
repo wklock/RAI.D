@@ -6,47 +6,17 @@
 // networking includes
 
 #include <sys/socket.h>
-#include <netdb.h>
 
-#include "client.h"
+#include "../network/network.h"
 
 
 
 int interrupt = 0;
 const char usage[] = "\n\t./client <controller IP> <controller port>\n\n";
-struct addrinfo hints, *addr_info;
 static char input[2048];
 
 void close_client(int i) {
     interrupt = 1;
-}
-/*
- * Connects the client to the controller
- * Returns the file descriptor or -1 on failure
- */
-int connect_to_controller(server_info_t* info) {
-
-	// ret val of getaddrinfo
-	int err;
-	int sock = socket(AF_INET, SOCK_STREAM, 0);
-
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-
-	// port in private range [49152, 65535]
-	if((err = getaddrinfo(info->ip, info->port, &hints, &addr_info)) != 0) {
-		fprintf(stderr, "IP/port error: %s\n", gai_strerror(err));
-		return -1;
-	}
-
-	if((err = connect(sock, addr_info->ai_addr, addr_info->ai_addrlen)) != 0) {
-		fprintf(stderr, "connect error: %s\n", gai_strerror(err));
-		return -1;
-	}
-
-    return sock;
-
 }
 
 int main(int argc, char **argv) {
@@ -61,21 +31,16 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
-    int sockfd;
     struct sigaction sig_act;
     sig_act.sa_handler = close_client;
     sigemptyset(&sig_act.sa_mask);
     sig_act.sa_flags = 0;
 
-    server_info_t* info = calloc(1, sizeof(server_info_t));
-    info->ip = strdup(argv[1]);
-    info->port = strdup(argv[2]);
-
-    if((sockfd = connect_to_controller(info)) == -1) {
+    int sockfd;
+    if((sockfd = get_socket(argv[1],argv[2])) == -1) {
         fprintf(stderr, "connecting to controller failed\n");
         exit(1);
     }
-    free(info);
 
     // Let the server know we're a client
     send(sockfd, "C", 1, 0);

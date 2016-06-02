@@ -25,7 +25,7 @@
 
 
 
-int get_socket(char *IP) {
+int get_socket(char *IP, char *port) {
 
 	// ret val of getaddrinfo
 	int err;
